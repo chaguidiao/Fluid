@@ -9,11 +9,11 @@ class Fluid(object):
     def __init__(self,
                  N=64,
                  dt=0.1,
-                 diff=0.01,
-                 visc=0.01,
+                 diff=0.001,
+                 visc=0.001,
                  force=5.0,
                  dens_source=100.0,
-                 solver='iter'):
+                 solver='direct'):
         self.N = N
         self.dt = dt
         self.diff = diff
