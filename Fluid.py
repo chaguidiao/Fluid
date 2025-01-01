@@ -24,6 +24,7 @@ class Fluid(object):
         # TODO: Extend to > 2d support
         self.v = np.zeros((self.N + 2, self.N + 2, 2))
         self.dens = np.zeros((self.N + 2, self.N + 2, 1))
+        self.A = self._build_Amat()
         self.coeff_density = self._build_density_coeff()
         self.coeff_velocity = self._build_velocity_coeff()
         self.coeff_project = self._build_project_coeff()
@@ -55,9 +56,8 @@ class Fluid(object):
         x0 = (1+4a)x - axt - axb - axl - axr
         Ax = x0
         '''
-        A = self._build_Amat()
         a = self.dt * self.diff * pow(self.N, 2)
-        coeff = -a * A + np.eye(A.shape[0]) * (1 + 4 * a)
+        coeff = -a * self.A + np.eye(self.A.shape[0]) * (1 + 4 * a)
         return csc_matrix(coeff)
 
     def _build_velocity_coeff(self):
@@ -66,17 +66,15 @@ class Fluid(object):
         x0 = (1+4a)x - axt - axb - axl - axr
         Ax = x0
         '''
-        A = self._build_Amat()
         a = self.dt * self.visc * pow(self.N, 2)
-        coeff = -a * A + np.eye(A.shape[0]) * (1 + 4 * a)
+        coeff = -a * self.A + np.eye(self.A.shape[0]) * (1 + 4 * a)
         return csc_matrix(coeff)
 
     def _build_project_coeff(self):
         '''
         x0 = 4x - xt - xb - xl - xr
         '''
-        A = self._build_Amat()
-        coeff = -A + np.eye(A.shape[0]) * 4
+        coeff = -self.A + np.eye(self.A.shape[0]) * 4
         return csc_matrix(coeff)
 
     def _itsolve(self, x, x0, N, a, c):
