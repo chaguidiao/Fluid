@@ -5,8 +5,8 @@ from Fluid import *
 
 def draw_density(dens, window_width, window_height, cell_size):
     z = dens.copy()
-    #z *= (255.0 / np.fmax((z.max() - z.min()), 0.001))
     z *= 255.0
+    z[z > 255.] = 255
     z = z.astype('uint8')
     x = np.linspace(0, window_width, z.shape[0])
     y = np.linspace(0, window_height, z.shape[1])
@@ -67,6 +67,7 @@ def main():
     window_height = 450
     N = 64
     show_velocity = False
+    show_fps = False
     omx, omy = 0, 0
 
     fluid = Fluid(N=N, force=15.)
@@ -93,6 +94,10 @@ def main():
             show_velocity = not show_velocity
         if IsKeyPressed(KEY_C):
             fluid.reset()
+        if IsKeyPressed(KEY_F):
+            show_fps = not show_fps
+        if show_fps:
+            DrawFPS(1, 1)
         fluid.update_velocity(source)
         fluid.update_density(source)
         BeginDrawing()
