@@ -1,8 +1,8 @@
 
 import numpy as np
 from scipy.linalg import solve
-from scipy.sparse.linalg import spsolve
-from scipy.sparse import csc_matrix, coo_matrix, issparse
+from scipy.sparse.linalg import spsolve, bicg
+from scipy.sparse import csr_matrix, csc_matrix, issparse
 from scipy.interpolate import RegularGridInterpolator
 
 class Fluid(object):
@@ -10,17 +10,20 @@ class Fluid(object):
                  N=64,
                  dt=0.1,
                  diff=0.001,
-                 visc=0.001,
+                 visc=0.01,
                  force=5.0,
                  dens_source=100.0,
-                 solver='direct'):
+                 solver='iter'):
         self.N = N
         self.dt = dt
         self.diff = diff
         self.visc = visc
         self.force = force
         self.dens_source = dens_source
-        self.solver = solver
+        if solver in ['direct', 'iter']:
+            self.solver = solver
+        else:
+            print(f'Unsupported solver \'{solver}\' specified.  Reverted back to iter')
         # TODO: Extend to > 2d support
         self.v = np.zeros((self.N + 2, self.N + 2, 2))
         self.dens = np.zeros((self.N + 2, self.N + 2, 1))
@@ -31,14 +34,16 @@ class Fluid(object):
 
     def _build_Amat(self):
         # TODO extend to > 2d support
-        A = np.fromfunction(self._build_matrix, [self.N] * 4)
+        A = np.fromfunction(self._build_matrix, [self.N + 2] * 4)
         # Convert to 2d matrix for linear solve
         A = A.reshape(A.shape[0] ** 2, -1)
         A = A.astype('int8')
+        '''
         A[0] = 0
         A[-1] = 0
         A[..., 0] = 0
         A[..., -1] = 0
+        '''
         return A
 
 
@@ -77,7 +82,7 @@ class Fluid(object):
         coeff = -self.A + np.eye(self.A.shape[0]) * 4
         return csc_matrix(coeff)
 
-    def _itsolve(self, x, x0, N, a, c):
+    def _itsolve2(self, x, x0, N, a, c):
         iter_method = 'jacobi'
         for k in range(0, 20):
             # Jacobi method rather than gauss siedel method used
@@ -92,30 +97,20 @@ class Fluid(object):
                 for i in range(1, N+1):
                     for j in range(1, N+1):
                         x[i, j] = (x0[i, j] + a * (x[i-1, j] + x[i+1, j] + x[i, j-1] + x[i, j+1])) / c
-            #print(f'k: {k}')
-            #print(x[:, :, 0])
-
-            #if k < 4:
-            #   print(f'--before bound k: {k}')
-            #   print(x[:, :, 0])
-
             self._set_bound(x)
-
-            #if k < 4:
-            #   print(f'--after bound k: {k}')
-            #   print(x[:, :, 0])
-
         return x
 
-    @staticmethod
-    def _solve(X, N, coeff):
-        # TODO > 2d shape generalize
-        X_inner = X[1:N+1, 1:N+1]
-        X_inner_ori_shape = X_inner.shape
-        X_inner = csc_matrix(X_inner.reshape(coeff.shape[0], -1))
-        X_inner = spsolve(coeff, X_inner)
-        if issparse(X_inner): X_inner = np.array(X_inner.todense()) # TODO
-        X[1:N+1, 1:N+1] = X_inner.reshape(X_inner_ori_shape)
+    def _solve(self, X, N, coeff):
+        X_ori_shape = X.shape
+        X = X.reshape(coeff.shape[0], -1)
+        if self.solver == 'direct':
+            X = spsolve(coeff, X)
+        elif self.solver == 'iter':
+            for axis in range(X.shape[-1]):
+                X[..., axis] = bicg(coeff, X[..., axis], x0=X[..., axis].copy())[0]
+        else:
+            raise ValueError(f'Unsupported solver: {self.solver}.  Supported solver type is [\'direct\', \'iter\'].')
+        X = X.reshape(X_ori_shape)
         return X
 
     def _advect(self, X):
@@ -137,12 +132,12 @@ class Fluid(object):
         self.dens += source[..., [0]] * self.dt
 
     def diffuse_density(self):
-        if self.solver == 'direct':
-            self.dens = self._solve(self.dens, self.N, self.coeff_density)
-        else:
+        if self.solver == 'fallback':
             a = self.dt * self.diff * self.N * self.N
             c = 1 + 4 * a
-            self.dens = self._itsolve(self.dens.copy(), self.dens, self.N, a, c)
+            self.dens = self._itsolve2(self.dens.copy(), self.dens, self.N, a, c)
+        else:
+            self.dens = self._solve(self.dens, self.N, self.coeff_density)
 
     def advect_density(self):
         self.dens = self._advect(self.dens)
@@ -199,12 +194,12 @@ class Fluid(object):
         self.v += source[..., 1:] * self.dt
 
     def diffuse_velocity(self):
-        if self.solver == 'direct':
-            self.v = self._solve(self.v, self.N, self.coeff_velocity)
-        else:
+        if self.solver == 'fallback':
             a = self.dt * self.visc * self.N * self.N
             c = 1 + 4 * a
-            self.v = self._itsolve(self.v.copy(), self.v, self.N, a, c)
+            self.v = self._itsolve2(self.v.copy(), self.v, self.N, a, c)
+        else:
+            self.v = self._solve(self.v, self.N, self.coeff_velocity)
 
     def advect_velocity(self):
         # Self advection
@@ -222,11 +217,11 @@ class Fluid(object):
         #print('before')
         #print(divergence[:, :, 0])
         if self.solver == 'direct':
-            divergence = self._solve(divergence, self.N, self.coeff_project)
-        else:
             a = 1.
             c = 4.
-            divergence = self._itsolve(np.zeros(divergence.shape), divergence, self.N, a, c)
+            divergence = self._itsolve2(np.zeros(divergence.shape), divergence, self.N, a, c)
+        else:
+            divergence = self._solve(divergence, self.N, self.coeff_project)
         #print('after')
         #print(divergence[:, :, 0])
         p = np.gradient(divergence, axis=np.arange(v_dim))
