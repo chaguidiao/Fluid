@@ -111,6 +111,7 @@ class Fluid(object):
         else:
             raise ValueError(f'Unsupported solver: {self.solver}.  Supported solver type is [\'direct\', \'iter\'].')
         X = X.reshape(X_ori_shape)
+        X = self._set_bound(X)
         return X
 
     def _advect(self, X):
