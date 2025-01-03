@@ -58,36 +58,27 @@ def get_source_from_UI(source, window_width, window_height, dens_source, force, 
         y = int(vec.y / window_height * source.shape[0])
         source[y, x, 1] = force * (x - omx)
         source[y, x, 2]  = force * (omy - y)
+        #print(source[y, x, 1], source[y, x, 2], x - omx, omy - y)
         omx, omy = x, y
 
     return omx, omy
 
 def main():
     window_width = 800
-    window_height = 450
+    window_height = 600
     N = 64
     show_velocity = False
-    show_fps = False
+    show_fps = True
     omx, omy = 0, 0
 
-    fluid = Fluid(N=N, force=15.)
+    fluid = Fluid(N=N, force=50., dt=0.5)
     # 1st is density, 2nd and 3rd are velocity components
     # respectively
     source = np.zeros((N + 2, N + 2, 3))
 
-    # Debug 1
-    #source = np.random.choice([0, 1], (N + 2) * (N + 2) * 3, p=[0.9, 0.1])
-    #source = source.reshape(N+2, N+2, 3)
-    #ource = source * np.random.rand(*source.shape)
-
-    # Debug 2
-    #source[35, 35, 0] = 100
-    #source[35, 10, 1] = 17.7
-    #source[35, 10, 2] = -88.6
-
     InitWindow(window_width, window_height, b"Fluid dynamics the numpy way")
     SetWindowState(FLAG_WINDOW_RESIZABLE)
-    SetTargetFPS(60)
+    SetTargetFPS(30)
     while not WindowShouldClose():
         omx, omy = get_source_from_UI(source, GetScreenWidth(), GetScreenHeight(), fluid.dens_source, fluid.force, omx, omy)
         if IsKeyPressed(KEY_V):
@@ -96,8 +87,6 @@ def main():
             fluid.reset()
         if IsKeyPressed(KEY_F):
             show_fps = not show_fps
-        if show_fps:
-            DrawFPS(1, 1)
         fluid.update_velocity(source)
         fluid.update_density(source)
         BeginDrawing()
@@ -106,6 +95,8 @@ def main():
             draw_velocity(fluid.get_velocity(), GetScreenWidth(), GetScreenHeight(), N)
         else:
             draw_density(fluid.get_density(), GetScreenWidth(), GetScreenHeight(), N)
+        if show_fps:
+            DrawFPS(1, 1)
         EndDrawing()
         source = np.zeros((N + 2, N + 2, 3))
     CloseWindow()
