@@ -20,8 +20,9 @@ class Fluid(object):
         self.visc = visc
         self.force = force
         self.dens_source = dens_source
-        if solver in ['direct', 'iter']:
+        if solver in ['direct', 'iter', 'fallback']:
             self.solver = solver
+            print(f'Using solver \'{solver}\'')
         else:
             print(f'Unsupported solver \'{solver}\' specified.  Reverted back to iter')
         # TODO: Extend to > 2d support
@@ -34,7 +35,7 @@ class Fluid(object):
 
     def _build_Amat(self):
         # TODO extend to > 2d support
-        A = np.fromfunction(self._build_matrix, [self.N + 2] * 4)
+        A = np.fromfunction(self._build_matrix, [self.N] * 4)
         # Convert to 2d matrix for linear solve
         A = A.reshape(A.shape[0] ** 2, -1)
         A = A.astype('int8')
@@ -86,14 +87,14 @@ class Fluid(object):
         iter_method = 'jacobi'
         for k in range(0, 20):
             # Jacobi method rather than gauss siedel method used
-            # by in the original c implementation
+            # by the original c implementation
             if iter_method == 'jacobi':
                 x[1:N + 1, 1:N + 1] = (x0[1:N + 1, 1:N + 1] + a *
                                        (x[0:N, 1:N + 1] +
                                        x[2:N + 2, 1:N + 1] +
                                        x[1:N + 1, 0:N] +
                                        x[1:N + 1, 2:N + 2])) / c
-            else: # gauss siedel
+            else: # gauss siedel (Slow)
                 for i in range(1, N+1):
                     for j in range(1, N+1):
                         x[i, j] = (x0[i, j] + a * (x[i-1, j] + x[i+1, j] + x[i, j-1] + x[i, j+1])) / c
@@ -101,29 +102,35 @@ class Fluid(object):
         return x
 
     def _solve(self, X, N, coeff):
-        X_ori_shape = X.shape
-        X = X.reshape(coeff.shape[0], -1)
+        X_inner = X[1:N+1, 1:N+1]
+        X_inner_ori_shape = X_inner.shape
+        X_inner = X_inner.reshape(coeff.shape[0], -1)
         if self.solver == 'direct':
-            X = spsolve(coeff, X)
+            X_inner = spsolve(coeff, X_inner.ravel())
         elif self.solver == 'iter':
             for axis in range(X.shape[-1]):
-                X[..., axis] = bicg(coeff, X[..., axis], x0=X[..., axis].copy())[0]
+                X_inner[..., axis] = bicg(coeff, X_inner[..., axis], x0=X_inner[..., axis].copy())[0]
         else:
             raise ValueError(f'Unsupported solver: {self.solver}.  Supported solver type is [\'direct\', \'iter\'].')
-        X = X.reshape(X_ori_shape)
+        X_inner = X_inner.reshape(X_inner_ori_shape)
+        X[1:N+1, 1:N+1] = X_inner
         X = self._set_bound(X)
         return X
 
     def _advect(self, X):
         # linear backtrace
         # TODO How to extend to RK2 solver as mentioned in the paper
-        coords = [coord[..., np.newaxis] for coord in np.meshgrid(*[np.arange(self.N)] * (X.ndim - 1), indexing='ij')]
-        coords = np.concat(coords, axis=X.ndim - 1)
-        #coords = np.einsum('ij...->ji...', coords)
-        coords = coords + 1.0
+        try:
+            _ = self._coords
+        except AttributeError:
+            coords = [coord[..., np.newaxis] for coord in np.meshgrid(*[np.arange(self.N)] * (X.ndim - 1), indexing='ij')]
+            coords = np.concat(coords, axis=X.ndim - 1)
+            coords = coords + 1.0
+            self._coords = coords
+        else:
+            coords = self._coords
         transport = coords - self.dt * self.N * self.v[1:-1,1:-1,:] # Leaving out boundary cells
-        transport[transport < 0.5] = 0.5
-        transport[transport > (self.N + 0.5)] = self.N + 0.5
+        transport = np.clip(transport, 0.5, self.N + 0.5)
         grids = list((np.arange(i) for i in X.shape[:-1]))
         interp = RegularGridInterpolator(grids, X)
         X[1:-1,1:-1,:] = interp(transport)
@@ -217,7 +224,7 @@ class Fluid(object):
         divergence = self._set_bound(divergence)
         #print('before')
         #print(divergence[:, :, 0])
-        if self.solver == 'direct':
+        if self.solver == 'fallback':
             a = 1.
             c = 4.
             divergence = self._itsolve2(np.zeros(divergence.shape), divergence, self.N, a, c)
@@ -236,6 +243,7 @@ class Fluid(object):
         self.project_velocity()
         self.set_velocity_bound()
         self.advect_velocity()
+        self.set_velocity_bound() # Newly added on 3rd August 2025
         self.project_velocity()
         self.set_velocity_bound()
 

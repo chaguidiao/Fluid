@@ -1,7 +1,44 @@
-#!/usr/bin/env /media/nfs/sda3/workspace/Venvs/socrates/graphic/bin/python
+#!/usr/bin/env python
 
 from raylib import *
 from Fluid import *
+
+def toner_tu_force(fluid):
+    # TODO To merge to Fluid class
+    alpha = 2.7
+    beta = 1.4
+    noise_strength = 0.08
+    v = fluid.get_velocity()
+    speed_sq = (v[..., 0] ** 2) + (v[..., 1] ** 2)
+    force_magnitude = alpha - beta * speed_sq
+    noise = np.random.rand(*v.shape) * noise_strength
+    v = np.einsum('ij,ijk->ijk', force_magnitude, v) + noise
+    fluid.v += (v * fluid.dt)
+
+def apply_upward_force(t, coord):
+    def _apply_upward_force(t, coord):
+        tdecay = np.maximum((1.0 - (0.05 * t)), 0.)
+        upward_force = (
+            tdecay
+            *
+            np.where(
+                (
+                    (coord[0] > 0.4)
+                    &
+                    (coord[0] < 0.6)
+                    &
+                    (coord[1] > 0.1)
+                    &
+                    (coord[1] < 0.3)
+                ),
+                np.array([0.0, 1.0]),
+                np.array([0.0, 0.0])
+            )
+        )
+        return upward_force
+
+    return np.vectorize(pyfunc=_apply_upward_force, signature='(),(d)->(d)')(t, coord)
+
 
 def draw_density(dens, window_width, window_height, cell_size):
     z = dens.copy()
@@ -63,24 +100,82 @@ def get_source_from_UI(source, window_width, window_height, dens_source, force, 
 
     return omx, omy
 
+def forcing_function(time, point):
+    time_decay = np.maximum(
+        2.0 - 0.5 * time,
+        0.0,
+    )
+    forced_value = (
+        time_decay
+        *
+        np.where(
+            (
+                (point[0] > 0.4)
+                &
+                (point[0] < 0.6)
+                &
+                (point[1] > 0.1)
+                &
+                (point[1] < 0.3)
+            ),
+            np.array([0.0, 1.0]),
+            np.array([0.0, 1.0]),
+        )
+    )
+    return forced_value
+
+forcing_function_vectorized = np.vectorize(
+    pyfunc=forcing_function,
+    signature='(),(d)->(d)',
+)
+
 def main():
     window_width = 800
     window_height = 600
-    N = 64
-    show_velocity = False
+    N = 41
+    show_velocity = True
     show_fps = True
     omx, omy = 0, 0
+    force = 10.
 
-    fluid = Fluid(N=N, force=50., dt=0.5)
+    fluid = Fluid(N=N, force=force, dt=0.1, solver='iter')
     # 1st is density, 2nd and 3rd are velocity components
     # respectively
     source = np.zeros((N + 2, N + 2, 3))
 
+    x = np.linspace(0.0, 1.0, N + 2)
+    y = np.linspace(0.0, 1.0, N + 2)
+    X, Y = np.meshgrid(x, y, indexing='ij')
+    coord = np.concatenate(
+        (
+            X[..., np.newaxis],
+            Y[..., np.newaxis],
+        ),
+        axis=-1,
+    )
+
     InitWindow(window_width, window_height, b"Fluid dynamics the numpy way")
     SetWindowState(FLAG_WINDOW_RESIZABLE)
     SetTargetFPS(30)
+    t = 0.
+    dt = 0.1
     while not WindowShouldClose():
+        t = t + dt
+
+        # Inject upward force for testing
+        if IsKeyDown(KEY_W):
+            t = 0.
+            source[:, :, 1:] = forcing_function_vectorized(t, coord)
+            t_decay = np.maximum((1.0 - (0.05 * t)), 0.)
+            #source[N//2, N//2, 0] = (10 * np.random.randn() + 20) * t_decay
+            source[..., 1:] = apply_upward_force(t, coord) * 20
+
+        # Toner-Tu force for collective motion modeling
+        toner_tu_force(fluid)
+
+        # Interactive input
         omx, omy = get_source_from_UI(source, GetScreenWidth(), GetScreenHeight(), fluid.dens_source, fluid.force, omx, omy)
+
         if IsKeyPressed(KEY_V):
             show_velocity = not show_velocity
         if IsKeyPressed(KEY_C):
