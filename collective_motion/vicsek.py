@@ -25,7 +25,7 @@ class VicsekModel:
         # For density field (if needed later, though decoupled from core model)
         self.grid_resolution = 128
         self.smoothing_sigma = 3.0
-        self.weights = np.random.rand(self.grid_resolution, self.grid_resolution)
+        self.weights = (np.random.rand(self.grid_resolution, self.grid_resolution) * 2) - 1
         x = np.linspace(0, self.box_size, self.grid_resolution)
         y = np.linspace(0, self.box_size, self.grid_resolution)
         self.weights_fn = RegularGridInterpolator((x, y), self.weights)
@@ -38,6 +38,7 @@ class VicsekModel:
         for i in range(self.n_particles):
             # Average velocities affected by the weights of the neighbors
             w = self.weights_fn(self.positions[neighbor_indices[i]])[:, np.newaxis]
+            np.fill_diagonal(w, 0) # Excluding self-loop
             avg_vector = np.einsum('ij,jk->k', w, self.velocities[neighbor_indices[i]])
             mean_angles[i] = np.arctan2(avg_vector[1], avg_vector[0])
         return mean_angles
