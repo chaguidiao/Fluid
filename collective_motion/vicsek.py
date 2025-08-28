@@ -5,7 +5,7 @@ from scipy.interpolate import RegularGridInterpolator
 
 class VicsekModel:
     def __init__(self, n_particles, box_size, interaction_radius, speed, noise, dt,
-                 boundary_mode="Reflective", noise_decay_rate=1e-3, bounce_force=15.0, time_lag=0.01):
+                 boundary_mode="Reflective", noise_decay_rate=1e-3, bounce_force=0.01, time_lag=0.01):
         self.n_particles = n_particles
         self.box_size = box_size
         self.interaction_radius = interaction_radius
@@ -36,7 +36,7 @@ class VicsekModel:
         neighbor_indices = tree.query_ball_point(self.positions, r=self.interaction_radius)
 
         for i in range(self.n_particles):
-            # Original logic from vicsek.py, using weights for average velocity
+            # Average velocities affected by the weights of the neighbors
             w = self.weights_fn(self.positions[neighbor_indices[i]])[:, np.newaxis]
             avg_vector = np.einsum('ij,jk->k', w, self.velocities[neighbor_indices[i]])
             mean_angles[i] = np.arctan2(avg_vector[1], avg_vector[0])
@@ -44,25 +44,33 @@ class VicsekModel:
 
     def _apply_boundary_conditions(self):
         if self.boundary_mode == "Periodic":
-            self.positions %= self.box_size
+            pass
         else: # Reflective
-            for i in range(self.n_particles):
-                # Check for x-axis boundaries
-                if self.positions[i, 0] < 0:
-                    self.positions[i, 0] = -self.positions[i, 0] * self.bounce_force
-                    self.angles[i] = np.pi - self.angles[i] # Reflect angle
-                elif self.positions[i, 0] > self.box_size:
-                    self.positions[i, 0] = 2 * self.box_size - self.positions[i, 0] * self.bounce_force
-                    self.angles[i] = np.pi - self.angles[i] # Reflect angle
+            # X-axis boundaries
+            left_bound_indices = self.positions[:, 0] < 0
+            self.positions[left_bound_indices, 0] = self.bounce_force
+            self.angles[left_bound_indices] = np.pi - self.angles[left_bound_indices]
 
-                # Check for y-axis boundaries
-                if self.positions[i, 1] < 0:
-                    self.positions[i, 1] = -self.positions[i, 1] * self.bounce_force
-                    self.angles[i] = -self.angles[i] # Reflect angle
-                elif self.positions[i, 1] > self.box_size:
-                    self.positions[i, 1] = 2 * self.box_size - self.positions[i, 1] * self.bounce_force
-                    self.angles[i] = -self.angles[i] # Reflect angle
-            self.positions %= self.box_size # Ensure positions are within box after bounce
+            right_bound_indices = self.positions[:, 0] > self.box_size
+            self.positions[right_bound_indices, 0] = self.box_size - self.bounce_force
+            self.angles[right_bound_indices] = np.pi - self.angles[right_bound_indices]
+
+            # Y-axis boundaries
+            bottom_bound_indices = self.positions[:, 1] < 0
+            self.positions[bottom_bound_indices, 1] = self.bounce_force
+            self.angles[bottom_bound_indices] = -self.angles[bottom_bound_indices]
+
+            top_bound_indices = self.positions[:, 1] > self.box_size
+            self.positions[top_bound_indices, 1] = self.box_size - self.bounce_force
+            self.angles[top_bound_indices] = -self.angles[top_bound_indices]
+
+            # Update velocities again
+            self.velocities = np.array([np.cos(self.angles), np.sin(self.angles)]).T
+
+        # Ensure angles are within [0, 2*pi]
+        # and positions are within box
+        self.angles = self.angles % (2 * np.pi)
+        self.positions %= self.box_size
 
     def step(self):
         mean_angles = self._calculate_mean_angles()
@@ -82,9 +90,6 @@ class VicsekModel:
 
         # Apply boundary conditions
         self._apply_boundary_conditions()
-
-        # Ensure angles are within [0, 2*pi]
-        self.angles = self.angles % (2 * np.pi)
 
         return self.positions, self.angles, self.velocities
 
