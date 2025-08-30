@@ -8,7 +8,7 @@ from vicsek import VicsekModel
 BOX_SIZE = 100
 REPULSION_RADIUS = 0.75 # This is not used in the current VicsekModel class, but was in original
 INTERACTION_RADIUS = 10.0
-P_DENSITY = 0.05
+P_DENSITY = 0.15
 DT = 1.0
 NOISE = 0.05 # Low noise for ordered state
 
@@ -31,7 +31,7 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
 title = ax1.set_title(f"Vicsek Model {vicsek_model.boundary_mode} Boundaries")
 quiver = ax1.quiver(vicsek_model.positions[:, 0], vicsek_model.positions[:, 1],
                     vicsek_model.velocities[:, 0], vicsek_model.velocities[:, 1],
-                    vicsek_model.angles, scale=50, cmap='hsv')
+                    vicsek_model.speed, scale=50, cmap='coolwarm')
 ax1.set_xlim(0, BOX_SIZE)
 ax1.set_ylim(0, BOX_SIZE)
 ax1.set_xticks([])
@@ -74,11 +74,11 @@ slider.on_changed(on_dt_change)
 
 # --- Animation Update Function ---
 def update(frame):
-    positions, angles, velocities = vicsek_model.step()
+    positions, angles, velocities, speed = vicsek_model.step()
 
     # Update particle plot
     quiver.set_offsets(positions)
-    quiver.set_UVC(velocities[:, 0], velocities[:, 1], angles)
+    quiver.set_UVC(velocities[:, 0], velocities[:, 1], speed * 10)
 
     # Update density plot
     density_map = vicsek_model.get_density_map()

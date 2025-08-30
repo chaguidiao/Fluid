@@ -124,7 +124,7 @@ class VicsekModel:
         # Apply boundary conditions
         self._apply_boundary_conditions()
 
-        return self.positions, self.angles, self.velocities
+        return self.positions, self.angles, self.velocities, self.speed
 
     def get_density_map(self):
         # This method is kept for completeness but is decoupled from the core step
