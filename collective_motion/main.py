@@ -9,9 +9,8 @@ BOX_SIZE = 100
 REPULSION_RADIUS = 0.75 # This is not used in the current VicsekModel class, but was in original
 INTERACTION_RADIUS = 10.0
 P_DENSITY = 0.05
-SPEED = 1.0
 DT = 1.0
-NOISE = 0.35 # Low noise for ordered state
+NOISE = 0.05 # Low noise for ordered state
 
 N_PARTICLES = int(P_DENSITY * (BOX_SIZE ** 2))
 
@@ -20,7 +19,6 @@ vicsek_model = VicsekModel(
     n_particles=N_PARTICLES,
     box_size=BOX_SIZE,
     interaction_radius=INTERACTION_RADIUS,
-    speed=SPEED,
     noise=NOISE,
     dt=DT,
     boundary_mode="Reflective"
