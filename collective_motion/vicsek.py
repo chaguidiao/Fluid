@@ -30,7 +30,7 @@ class VicsekModel:
         self.neighbor_indices = []
 
         # Weight initialization
-        excite_ratio = 0.5
+        excite_ratio = 0.8
         self.weights = self._generate_weights(self.grid_resolution * self.grid_resolution, excite_ratio)
         self.weights = self.weights.reshape(self.grid_resolution, -1)
         x = np.linspace(0, self.box_size, self.grid_resolution)
@@ -124,7 +124,16 @@ class VicsekModel:
         # Apply boundary conditions
         self._apply_boundary_conditions()
 
+        # Apply weight update
+        learning_rate = 0.51 # TODO: Add decay
+        self.weights += (self.get_divergence() * learning_rate)
+
         return self.positions, self.angles, self.velocities, self.speed
+
+    def get_divergence(self):
+        # Technically a laplacian operator
+        fx, fy = np.gradient(self.get_density_map())
+        return fx + fy
 
     def get_density_map(self):
         # This method is kept for completeness but is decoupled from the core step

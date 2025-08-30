@@ -11,7 +11,8 @@ REPULSION_RADIUS = 0.75 # This is not used in the current VicsekModel class, but
 INTERACTION_RADIUS = 10.0
 P_DENSITY = 0.15
 DT = 1.0
-NOISE = 0.05 # Low noise for ordered state
+NOISE = 0.01 # Low noise for ordered state
+NOISE_DECAY_RATE = 0.0
 
 # --- Gaussian Filter Configuration for Weights Heatmap ---
 GAUSSIAN_SIGMA = 2.0 # Adjust this value to control the strength of the blur.
@@ -25,6 +26,7 @@ vicsek_model = VicsekModel(
     box_size=BOX_SIZE,
     interaction_radius=INTERACTION_RADIUS,
     noise=NOISE,
+    noise_decay_rate=NOISE_DECAY_RATE,
     dt=DT,
     boundary_mode="Reflective"
 )
