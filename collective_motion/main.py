@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.widgets import RadioButtons, Slider
+from scipy.ndimage import gaussian_filter
 from vicsek import VicsekModel
 
 # --- Model Parameters ---
@@ -11,6 +12,10 @@ INTERACTION_RADIUS = 10.0
 P_DENSITY = 0.15
 DT = 1.0
 NOISE = 0.05 # Low noise for ordered state
+
+# --- Gaussian Filter Configuration for Weights Heatmap ---
+GAUSSIAN_SIGMA = 2.0 # Adjust this value to control the strength of the blur.
+                     # Higher values mean more blur.
 
 N_PARTICLES = int(P_DENSITY * (BOX_SIZE ** 2))
 
@@ -24,8 +29,13 @@ vicsek_model = VicsekModel(
     boundary_mode="Reflective"
 )
 
-# --- Set up the Plot with Two Subplots ---
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
+# --- Set up the Plot with Three Subplots ---
+fig = plt.figure(figsize=(21, 7))
+
+# Use subplot2grid for more complex layouts
+ax1 = plt.subplot2grid((2, 3), (0, 0), rowspan=2, colspan=2) # Particle plot
+ax2 = plt.subplot2grid((2, 3), (0, 2)) # Density plot
+ax3 = plt.subplot2grid((2, 3), (1, 2)) # Weights heatmap
 
 # Subplot 1: Particles
 title = ax1.set_title(f"Vicsek Model {vicsek_model.boundary_mode} Boundaries")
@@ -51,6 +61,16 @@ ax2.set_xticks([])
 ax2.set_yticks([])
 ax2.set_aspect('equal')
 fig.colorbar(density_plot, ax=ax2, label="Density")
+
+# Subplot 3: Weights Heatmap
+ax3.set_title(f"Weights Heatmap (Gaussian Filtered, Sigma={GAUSSIAN_SIGMA})")
+weights_plot = ax3.imshow(vicsek_model.weights.T, origin='lower',
+                           extent=[0, BOX_SIZE, 0, BOX_SIZE], cmap='coolwarm',
+                           vmin=-1, vmax=1)
+ax3.set_xticks([])
+ax3.set_yticks([])
+ax3.set_aspect('equal')
+fig.colorbar(weights_plot, ax=ax3, label="Weight")
 
 # --- Radio Buttons for Boundary Control ---
 ax_radio = plt.axes([0.2, 0.03, 0.2, 0.08]) # [left, bottom, width, height]
@@ -78,18 +98,24 @@ def update(frame):
 
     # Update particle plot
     quiver.set_offsets(positions)
-    quiver.set_UVC(velocities[:, 0], velocities[:, 1], speed * 10)
+    speed_visual_intensify_factor = 10
+    quiver.set_UVC(velocities[:, 0], velocities[:, 1], speed * speed_visual_intensify_factor)
 
     # Update density plot
     density_map = vicsek_model.get_density_map()
     density_plot.set_data(density_map.T)
     density_plot.set_clim(vmin=0, vmax=np.max(density_map) * 1.2)
 
+    # Update weights plot
+    weights_visual_intensify_factor = 10.
+    filtered_weights = gaussian_filter(vicsek_model.weights * weights_visual_intensify_factor, sigma=GAUSSIAN_SIGMA)
+    weights_plot.set_data(filtered_weights.T)
+
     # Update labels
     noise_label.set_text(f'noise: {vicsek_model.noise:.2f}')
     repulse_label.set_text(f'repulse: {REPULSION_RADIUS}') # REPULSION_RADIUS is not used in model, but kept for consistency
 
-    return quiver, density_plot, noise_label, repulse_label
+    return quiver, density_plot, weights_plot, noise_label, repulse_label
 
 # --- Run Animation ---
 animation = FuncAnimation(fig, update, frames=200, interval=30, blit=True)
