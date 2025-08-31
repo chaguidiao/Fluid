@@ -5,11 +5,14 @@ from scipy.interpolate import RegularGridInterpolator
 #from scip.stats import skewnorm
 
 class VicsekModel:
-    def __init__(self, n_particles, box_size, interaction_radius, noise, dt, min_speed=-0.5, max_speed=2.5,
-                 boundary_mode="Reflective", noise_decay_rate=1e-3, bounce_force=0.01, time_lag=0.01):
+    def __init__(self, n_particles, box_size, interaction_radius, repulsion_radius, noise, dt,
+                 min_speed=-0.5, max_speed=2.5,
+                 boundary_mode="Reflective", noise_decay_rate=1e-3, bounce_force=0.01, time_lag=0.01,
+                 min_weight=-20.0, max_weight=20.0):
         self.n_particles = n_particles
         self.box_size = box_size
         self.interaction_radius = interaction_radius
+        self.repulsion_radius = repulsion_radius
         self.min_speed = min_speed
         self.max_speed = max_speed
         self.speed = np.random.rand(self.n_particles) + self.min_speed
@@ -18,6 +21,8 @@ class VicsekModel:
         self.boundary_mode = boundary_mode
         self.noise_decay_rate = noise_decay_rate
         self.bounce_force = bounce_force
+        self.min_weight = min_weight
+        self.max_weight = max_weight
         self.time_lag = time_lag
         # For density field
         self.grid_resolution = 128
@@ -90,16 +95,33 @@ class VicsekModel:
             self.positions[top_bound_indices, 1] = self.box_size - self.bounce_force
             self.angles[top_bound_indices] = -self.angles[top_bound_indices]
 
-            # Update velocities again
-            self.velocities = np.array([np.cos(self.angles), np.sin(self.angles)]).T
-
         # Ensure angles are within [0, 2*pi]
         # and positions are within box
         self.angles = self.angles % (2 * np.pi)
+        self.velocities = (np.array([np.cos(self.angles), np.sin(self.angles)]) * self.speed).T
         self.positions %= self.box_size
+
+    def _calculate_repulsion_force(self):
+        alpha = 2.0
+        tree = cKDTree(self.positions, boxsize=[self.box_size, self.box_size])
+        repulse_neighbor_indices = tree.query_ball_point(self.positions, r=self.repulsion_radius)
+        repulse_force = np.zeros_like(self.velocities)
+        for i in range(self.n_particles):
+            repulse_neighbors = repulse_neighbor_indices[i]
+            if len(repulse_neighbors) > 1:
+                dist = np.linalg.norm(self.positions[i] - self.positions[repulse_neighbors], axis=1)
+                dist = dist[dist > 0]
+                if dist.size > 0:
+                    avg_dist = dist.mean()
+                    center_pos = np.mean(self.positions[repulse_neighbors], axis=0)
+                    force = self.positions[i] - center_pos # Vector moving away from center pos
+                    repulse_force[i] = alpha / avg_dist * force
+        return repulse_force
 
     def step(self):
         self.neighbor_indices = self._get_neighbor_indices()
+
+        repulse_force = self._calculate_repulsion_force()
 
         # Get mean angles
         mean_angles = self._calculate_mean_angles()
@@ -119,6 +141,7 @@ class VicsekModel:
 
         # Update velocities and positions
         self.velocities = (np.array([np.cos(self.angles), np.sin(self.angles)]) * self.speed).T
+        self.velocities += repulse_force # Add repulse force
         self.positions += self.velocities * self.dt
 
         # Apply boundary conditions
@@ -127,6 +150,7 @@ class VicsekModel:
         # Apply weight update
         learning_rate = 0.51 # TODO: Add decay
         self.weights += (self.get_divergence() * learning_rate)
+        self.weights = np.clip(self.weights, self.min_weight, self.max_weight)
 
         return self.positions, self.angles, self.velocities, self.speed
 

@@ -7,11 +7,11 @@ from vicsek import VicsekModel
 
 # --- Model Parameters ---
 BOX_SIZE = 100
-REPULSION_RADIUS = 0.75 # This is not used in the current VicsekModel class, but was in original
+REPULSION_RADIUS = 0.75
 INTERACTION_RADIUS = 10.0
-P_DENSITY = 0.15
+P_DENSITY = 0.05
 DT = 1.0
-NOISE = 0.01 # Low noise for ordered state
+NOISE = 0.00 # Low noise for ordered state
 NOISE_DECAY_RATE = 0.0
 
 # --- Gaussian Filter Configuration for Weights Heatmap ---
@@ -25,6 +25,7 @@ vicsek_model = VicsekModel(
     n_particles=N_PARTICLES,
     box_size=BOX_SIZE,
     interaction_radius=INTERACTION_RADIUS,
+    repulsion_radius=REPULSION_RADIUS,
     noise=NOISE,
     noise_decay_rate=NOISE_DECAY_RATE,
     dt=DT,
