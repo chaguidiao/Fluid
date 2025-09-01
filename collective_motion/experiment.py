@@ -9,7 +9,8 @@ import time
 np.random.seed(int(time.time()))
 
 def init_weights(box_size, grid_res):
-    W = np.random.randn(grid_res, grid_res)
+    sigma, mu = 1.0, 0
+    W = (np.random.randn(grid_res, grid_res) * sigma) + mu
     x = np.linspace(0, box_size, grid_res)
     y = x
     return RegularGridInterpolator((x, y), W)
@@ -20,7 +21,7 @@ grid_res = 128
 interaction_radius = 5
 speed = 1.0
 dt = 1.0
-noise = 0.05
+noise = 0.001
 positions = np.random.rand(n_particles, 2) * box_size
 angles = np.random.rand(n_particles) * 2 * np.pi
 W_fn = init_weights(box_size, grid_res)
@@ -37,7 +38,7 @@ def update_by_velocities(angles, D, noise=0.01):
     velocities = convert_to_velocities(angles)
     velocities = (D @ velocities) / D.sum(axis=1, keepdims=True)
     noise_terms = np.random.rand(*velocities.shape) * noise
-    velocities ++ noise_terms
+    velocities += noise_terms
     angles = convert_to_angles(velocities)
     return angles, velocities
 
@@ -50,15 +51,17 @@ def update_by_angles(angles, D, noise=0.01):
     velocities = convert_to_velocities(angles)
     return angles, velocities
 
-def get_weighted_coeff(positions, W_fn, min_dist=1e-9, alpha=1.0):
+def get_weighted_coeff(positions, W_fn, min_dist=1e-9, alpha=1.0, beta=2.0):
     D = distance_matrix(positions, positions, p=2)
     zero_indices = (D < min_dist)
     D[zero_indices] = 1.
     w = W_fn(positions).reshape(-1, 1)
     diff_W = w - w.T
-    D = diff_W * alpha / D
+    D = diff_W * alpha / np.exp(D)
     D = np.abs(D)
-    D[zero_indices] = 0.
+    #print(D.min(), D.max(), D.mean())
+    D[zero_indices] = 1.
+    np.fill_diagonal(D, beta) # Strong diagonal value causes the particles to 'resist' change
     return D
 
 def get_classic_coeff(positions, interaction_radius):
@@ -69,7 +72,7 @@ def get_classic_coeff(positions, interaction_radius):
     return D
 
 def update(frame):
-    global positions, angles, D
+    global positions, angles
     #D = get_classic_coeff(positions, interaction_radius)
     D = get_weighted_coeff(positions, W_fn)
     angles, velocities = update_by_velocities(angles, D, noise=noise)
