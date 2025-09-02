@@ -85,6 +85,7 @@ def on_boundary_change(label):
     fig.canvas.draw_idle()
 
 radio_buttons.on_clicked(on_boundary_change)
+radio_buttons.set_active(1)
 
 # --- Slider for simulation time Control ---
 ax_slider = plt.axes([0.5, 0.05, 0.2, 0.02])
