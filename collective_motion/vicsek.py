@@ -151,6 +151,9 @@ class VicsekModel:
         learning_rate = 0.51 # TODO: Add decay
         self.weights += (self.get_divergence() * learning_rate)
         self.weights = np.clip(self.weights, self.min_weight, self.max_weight)
+        x = np.linspace(0, self.box_size, self.grid_resolution)
+        y = np.linspace(0, self.box_size, self.grid_resolution)
+        self.weights_fn = RegulardGridInterpolator((x, y), self.weights)
 
         return self.positions, self.angles, self.velocities, self.speed
 
