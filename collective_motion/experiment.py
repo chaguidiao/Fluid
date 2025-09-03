@@ -5,6 +5,8 @@ from scipy.interpolate import RegularGridInterpolator
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 import time
+from scipy.ndimage import gaussian_filter # New import
+import opensimplex
 
 np.random.seed(int(time.time()))
 
@@ -16,8 +18,13 @@ dt = 1.0
 noise = 0.
 max_speed = 2.5
 min_speed = 0.0 # TODO Does it make sense to have 'reverse' speed?
-mu, sigma = 0, 1.0
-W = (np.random.randn(grid_res, grid_res) * sigma) + mu
+#mu, sigma = -.4, 1.05
+#W = (np.random.randn(grid_res, grid_res) * sigma) + mu
+W = opensimplex.noise2array(
+    np.linspace(0, box_size, grid_res),
+    np.linspace(0, box_size, grid_res)
+)
+W -= 0.2
 positions = np.random.rand(n_particles, 2) * box_size
 angles = np.random.rand(n_particles) * 2 * np.pi
 speed = np.random.rand(n_particles) * max_speed
@@ -101,16 +108,28 @@ def update(frame):
     #velocities += dv
     positions += (velocities * dt)
     positions %= box_size # periodic
-    quiver.set_offsets(positions)
-    quiver.set_UVC(velocities[:, 0], velocities[:, 1], angles)
+    quiver_particles.set_offsets(positions)
+    quiver_particles.set_UVC(velocities[:, 0], velocities[:, 1], angles)
 
-    return quiver
+    return quiver_particles,
 
 fig, ax = plt.subplots()
+
+# Heatmap of W
+im = ax.imshow(W, cmap='viridis', origin='lower', extent=[0, box_size, 0, box_size], alpha=0.1)
+
+# Smoothed W and its gradient for quivers
+smoothed_W = gaussian_filter(W, sigma=5) # Apply Gaussian filter
+Y, X = np.mgrid[0:box_size:grid_res*1j, 0:box_size:grid_res*1j]
+dW_dx, dW_dy = np.gradient(smoothed_W, box_size/grid_res) # Calculate gradient
+quiver_W = ax.quiver(X, Y, dW_dx, dW_dy, color='red', alpha=0.5) # Quivers for W gradient
+
+# Particle quivers
 v = convert_to_velocities(angles)
-quiver = ax.quiver(positions[:, 0], positions[:, 1], v[:, 0], v[:, 1], angles)
+quiver_particles = ax.quiver(positions[:, 0], positions[:, 1], v[:, 0], v[:, 1], angles)
+
 ax.set_xlim(0, box_size)
 ax.set_ylim(0, box_size)
 
-ani = FuncAnimation(fig=fig, func=update, frames=40, interval=30)
+ani = FuncAnimation(fig=fig, func=update, frames=40, interval=30, blit=True) # blit=True for performance
 plt.show()
