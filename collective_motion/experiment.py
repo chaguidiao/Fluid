@@ -9,6 +9,7 @@ from scipy.ndimage import gaussian_filter # New import
 import opensimplex
 
 np.random.seed(int(time.time()))
+opensimplex.seed(int(time.time()))
 
 n_particles = 500
 box_size = 50
@@ -17,14 +18,13 @@ interaction_radius = 5
 dt = 1.0
 noise = 0.
 max_speed = 2.5
-min_speed = 0.0 # TODO Does it make sense to have 'reverse' speed?
-#mu, sigma = -.4, 1.05
-#W = (np.random.randn(grid_res, grid_res) * sigma) + mu
+min_speed = 0.0
+weight_offset = -0.7 # Negative offset decreasing time to converge (stable down)
 W = opensimplex.noise2array(
     np.linspace(0, box_size, grid_res),
     np.linspace(0, box_size, grid_res)
 )
-W -= 0.2
+W += weight_offset
 positions = np.random.rand(n_particles, 2) * box_size
 angles = np.random.rand(n_particles) * 2 * np.pi
 speed = np.random.rand(n_particles) * max_speed
@@ -44,37 +44,27 @@ def convert_to_angles(velocities):
 def update_alignments(angles, D, w, noise=0.01):
     # Compute velocities on the fly, use angles to keep it as unit vector
     velocities = convert_to_velocities(angles)
-    velocities = (D @ velocities) / D.sum(axis=1, keepdims=True)
-    #noise_terms = np.random.rand(*velocities.shape) * noise
-    #velocities += noise_terms
+    D_abs = np.abs(D)
+    velocities = (D_abs @ velocities) / D_abs.sum(axis=1, keepdims=True)
     noise_terms = (np.random.rand(n_particles) * 2 * np.pi - np.pi)
     velocities += convert_to_velocities(noise_terms) * noise
     angles = convert_to_angles(velocities)
     return angles, velocities
 
-def get_weighted_coeff(positions, min_dist=1e-9, alpha=1.0, beta=0.02):
+def get_weighted_coeff(positions, w):
     """
     alpha: How much influence of other particles to force alignment
     beta: How much resistance the given particle to align
     """
     D = distance_matrix(positions, positions, p=2)
-    overlapped = (D < min_dist)
     D = 1 / np.exp(D)
-    D[overlapped] = 1. # TODO When there are overlapping particles, use beta to dominate
-    D[np.abs(D) < 1e-9] = 0. # Trim away small values.
-    np.fill_diagonal(D, beta)
+    wnorm = w / np.linalg.norm(w)
+    D = D * wnorm
     return D
 
-def get_classic_coeff(positions, interaction_radius):
-    D = distance_matrix(positions, positions, p=2)
-    neighbor_indices = (D < interaction_radius)
-    D[...] = 0
-    D[neighbor_indices] = 1
-    return D
-
-def get_acceleration(speed, w, D, accelerate_factor=0.5):
+def get_acceleration(speed, D, accelerate_factor=0.5):
     # Acceleration factor affects how soon the particles stabilize
-    return speed * w * accelerate_factor
+    return D @ speed * accelerate_factor
 
 '''
 def get_cohesion(positions, D):
@@ -99,8 +89,8 @@ def update(frame):
     global W, positions, angles, speed
     W_fn = get_weight_fn(W)
     w = W_fn(positions)
-    D = get_weighted_coeff(positions)
-    speed += get_acceleration(speed, w, D)
+    D = get_weighted_coeff(positions, w)
+    speed += get_acceleration(speed, D)
     speed = np.clip(speed, min_speed, max_speed)
     angles, velocities = update_alignments(angles, D, w, noise=noise)
     #da, dv = get_cohesion(positions, w)
