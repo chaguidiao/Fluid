@@ -17,13 +17,13 @@ def get_weight_fn(W):
     return RegularGridInterpolator((x, y), W)
 
 n_particles = 500
-box_size = 50
+box_size = 100
 grid_res = 128
 dt = 1.0
 noise = 0.
 max_speed = 2.5
 min_speed = 0.0
-weight_offset = -0.3 # Negative offset decreasing time to converge (stable down)
+weight_offset = -0.5 # Negative offset decreasing time to converge (stable down) <-- No longer true
 W = opensimplex.noise2array(
     np.linspace(0, box_size, grid_res),
     np.linspace(0, box_size, grid_res)
@@ -32,7 +32,8 @@ W += weight_offset
 positions = np.random.rand(n_particles, 2) * box_size
 angles = np.random.rand(n_particles) * 2 * np.pi
 #speed = np.random.rand(n_particles) * max_speed
-speed = np.abs(get_weight_fn(W)(positions)) * max_speed
+#speed = np.abs(get_weight_fn(W)(positions)) * max_speed
+speed = np.repeat(max_speed, n_particles)
 
 def convert_to_velocities(angles):
     v = np.array((np.cos(angles), np.sin(angles))).T
@@ -41,17 +42,15 @@ def convert_to_velocities(angles):
 def convert_to_angles(velocities):
     return np.arctan2(velocities[:, 1], velocities[:, 0])
 
-def get_weighted_coeff(positions):
-    W_fn = get_weight_fn(W)
-    w = W_fn(positions)
+def get_weighted_coeff(positions, wpos, alpha=1.0):
     D = distance_matrix(positions, positions, p=2)
     D = 1 / np.exp(D)
     Dnorm = D / np.linalg.norm(D, ord=1)
-    wnorm = w / np.linalg.norm(w, ord=2)
-    return Dnorm, wnorm
+    wposnorm = wpos / np.linalg.norm(wpos, ord=2)
+    C = Dnorm + alpha * wposnorm**3
+    return C
 
 def update_alignments(velocities, C):
-    #velocities = np.abs(C) @ velocities
     velocities = C @ velocities
     return velocities
 
@@ -70,21 +69,26 @@ def get_cohesion(positions, D):
     dv = (positions - center_positions) * force
     return dv
 
-def get_acceleration(speed, C, accelerate_factor=1.0):
-    # Acceleration factor affects how soon the particles stabilize
-    return C @ speed * accelerate_factor
+def get_acceleration(wpos, C, accelerate_factor=0.05):
+    # Acceleration factor affects how soon the particles 'cool down'
+    ds = C @ wpos * accelerate_factor
+    return ds.reshape(-1)
 
 def update(frame):
     global W, positions, angles, speed
-    Dnorm, wnorm = get_weighted_coeff(positions)
+    W_fn = get_weight_fn(W) # Assume weigth is dynamic
+    wpos = W_fn(positions)
+    C = get_weighted_coeff(positions, wpos)
     velocities = convert_to_velocities(angles)
-    velocities = update_alignments(velocities, Dnorm + 1.00 * wnorm**3)
-    #velocities += get_cohesion(positions)
-    #velocities += get_noise(noise=noise)
-    speed += get_acceleration(speed, Dnorm + 1.00 * wnorm**3)
+    velocities = update_alignments(velocities, C)
+    speed += get_acceleration(wpos, C)
     speed = np.clip(speed, min_speed, max_speed)
     #print(speed.min(), speed.max(), speed.mean(), speed.std())
+    #velocities += get_cohesion(positions)
+    #velocities += get_noise(noise=noise)
+
     velocities *= speed.reshape(-1, 1)
+
     positions += (velocities * dt)
     positions %= box_size # periodic
     angles = convert_to_angles(velocities)
@@ -111,5 +115,5 @@ quiver_particles = ax.quiver(positions[:, 0], positions[:, 1], v[:, 0], v[:, 1],
 ax.set_xlim(0, box_size)
 ax.set_ylim(0, box_size)
 
-ani = FuncAnimation(fig=fig, func=update, frames=40, interval=30, blit=False) # blit=True for performance
+ani = FuncAnimation(fig=fig, func=update, frames=40, interval=30, blit=True)
 plt.show()
