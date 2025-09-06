@@ -6,9 +6,11 @@ from scipy.ndimage import gaussian_filter # Still needed for weights heatmap smo
 # from vicsek import VicsekModel # Original VicsekModel
 from vicsek import TaichiVicsekModel # New Taichi-based model
 
+np.random.seed(42)
+
 # --- Model Parameters (adapted for exp_ti.py's model) ---
 BOX_SIZE = 100.0 # From exp_ti.py
-N_PARTICLES = 500 # From exp_ti.py
+N_PARTICLES = 1000 # From exp_ti.py
 GRID_RES = 128 # From exp_ti.py
 DT = 1.0 # From exp_ti.py
 MAX_SPEED = 3.0 # From exp_ti.py
@@ -65,11 +67,9 @@ ax2.set_aspect('equal')
 fig.colorbar(density_plot, ax=ax2, label="Density")
 
 # Subplot 3: Weights Heatmap
-ax3.set_title(f"Weights Heatmap (Gaussian Filtered, Sigma={GAUSSIAN_SIGMA})")
-initial_W_np = vicsek_model.initial_W_np
-smoothed_W_np = gaussian_filter(initial_W_np, sigma=GAUSSIAN_SIGMA)
-weights_plot = ax3.imshow(smoothed_W_np.T, origin='lower',
-                           extent=[0, BOX_SIZE, 0, BOX_SIZE], cmap='coolwarm')
+ax3.set_title(f"Weights Heatmap")
+weights_plot = ax3.imshow(vicsek_model.W.to_numpy().T, origin='lower',
+                          extent=[0, BOX_SIZE, 0, BOX_SIZE], cmap='coolwarm', interpolation='lanczos')
 ax3.set_xticks([])
 ax3.set_yticks([])
 ax3.set_aspect('equal')
@@ -111,9 +111,7 @@ def update(frame):
     density_plot.set_clim(vmin=0, vmax=np.max(density_map) * 1.2)
 
     # Update weights plot (W is static in exp_ti.py, so this won't change much)
-    current_W_np = vicsek_model.get_weights_np()
-    smoothed_W_np = gaussian_filter(current_W_np, sigma=GAUSSIAN_SIGMA)
-    weights_plot.set_data(smoothed_W_np.T)
+    weights_plot.set_data(vicsek_model.W.to_numpy().T)
 
     # Update labels (noise and repulsion are not directly from exp_ti.py model)
     noise_label.set_text(f'noise: N/A (Taichi model)')
@@ -122,5 +120,5 @@ def update(frame):
     return quiver, density_plot, weights_plot, noise_label, repulse_label
 
 # --- Run Animation ---
-animation = FuncAnimation(fig, update, frames=200, interval=30, blit=True)
+animation = FuncAnimation(fig, update, frames=200, interval=30, blit=False)
 plt.show()

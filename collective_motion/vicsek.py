@@ -4,6 +4,10 @@ import numpy as np
 from scipy.ndimage import gaussian_filter # Used for density map
 # from scipy.interpolate import RegularGridInterpolator # Not used in exp_ti.py core
 import opensimplex # Used for W initialization
+from perlin_numpy import (
+    generate_perlin_noise_2d,
+    generate_fractal_noise_2d
+)
 
 # Initialize Taichi once globally
 ti.init(arch=ti.vulkan)
@@ -35,9 +39,10 @@ class TaichiVicsekModel:
         self.C_field_global = ti.field(dtype=ti.f32, shape=(self.n_particles, self.n_particles))
 
         # Initialize fields on CPU and copy to Taichi
-        W_np = opensimplex.noise2array(
-            np.linspace(0, self.box_size, self.grid_res),
-            np.linspace(0, self.box_size, self.grid_res)
+        W_np = generate_fractal_noise_2d(
+            (self.grid_res, self.grid_res),
+            (8, 8),
+            5
         )
         W_np += self.weight_offset
         self.W.from_numpy(W_np.astype(np.float32))
