@@ -39,8 +39,7 @@ ax3 = plt.subplot2grid((2, 3), (1, 2)) # Weights heatmap
 # Subplot 1: Particles
 title = ax1.set_title(f"Taichi Vicsek Model (Periodic Boundaries)") # Boundary mode is fixed to periodic for now
 quiver = ax1.quiver(vicsek_model.initial_positions_np[:, 0], vicsek_model.initial_positions_np[:, 1],
-                    vicsek_model.initial_velocities_np[:, 0], vicsek_model.initial_velocities_np[:, 1],
-                    vicsek_model.max_speed, scale=50, cmap='coolwarm') # Use max_speed for color scaling
+                    vicsek_model.initial_velocities_np[:, 0], vicsek_model.initial_velocities_np[:, 1])
 ax1.set_xlim(0, BOX_SIZE)
 ax1.set_ylim(0, BOX_SIZE)
 ax1.set_xticks([])
@@ -66,8 +65,8 @@ ax3.set_title(f"Weights Heatmap (Gaussian Filtered, Sigma={GAUSSIAN_SIGMA})")
 initial_W_np = vicsek_model.initial_W_np
 smoothed_W_np = gaussian_filter(initial_W_np, sigma=GAUSSIAN_SIGMA)
 weights_plot = ax3.imshow(smoothed_W_np.T, origin='lower',
-                           extent=[0, BOX_SIZE, 0, BOX_SIZE], cmap='coolwarm',
-                           vmin=np.min(initial_W_np), vmax=np.max(initial_W_np)) # Use actual min/max of W
+                           extent=[0, BOX_SIZE, 0, BOX_SIZE], cmap='coolwarm')
+#                           vmin=np.min(initial_W_np), vmax=np.max(initial_W_np)) # Use actual min/max of W
 ax3.set_xticks([])
 ax3.set_yticks([])
 ax3.set_aspect('equal')
