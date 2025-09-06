@@ -11,9 +11,11 @@ BOX_SIZE = 100.0 # From exp_ti.py
 N_PARTICLES = 500 # From exp_ti.py
 GRID_RES = 128 # From exp_ti.py
 DT = 1.0 # From exp_ti.py
-MAX_SPEED = 2.5 # From exp_ti.py
+MAX_SPEED = 3.0 # From exp_ti.py
 MIN_SPEED = 0.0 # From exp_ti.py
 WEIGHT_OFFSET = -0.3 # From exp_ti.py
+ALPHA = 1.0
+ACCELERATE_FACTOR = 0.001 * BOX_SIZE
 
 # --- Gaussian Filter Configuration for Weights Heatmap ---
 GAUSSIAN_SIGMA = 2.0 # From exp_ti.py
@@ -26,7 +28,9 @@ vicsek_model = TaichiVicsekModel(
     max_speed=MAX_SPEED,
     min_speed=MIN_SPEED,
     weight_offset=WEIGHT_OFFSET,
-    grid_res=GRID_RES
+    grid_res=GRID_RES,
+    alpha=ALPHA,
+    accelerate_factor=ACCELERATE_FACTOR,
 )
 
 # --- Set up the Plot with Three Subplots ---
@@ -66,7 +70,6 @@ initial_W_np = vicsek_model.initial_W_np
 smoothed_W_np = gaussian_filter(initial_W_np, sigma=GAUSSIAN_SIGMA)
 weights_plot = ax3.imshow(smoothed_W_np.T, origin='lower',
                            extent=[0, BOX_SIZE, 0, BOX_SIZE], cmap='coolwarm')
-#                           vmin=np.min(initial_W_np), vmax=np.max(initial_W_np)) # Use actual min/max of W
 ax3.set_xticks([])
 ax3.set_yticks([])
 ax3.set_aspect('equal')

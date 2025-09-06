@@ -10,7 +10,7 @@ ti.init(arch=ti.vulkan)
 
 @ti.data_oriented # Add this decorator
 class TaichiVicsekModel:
-    def __init__(self, n_particles, box_size, dt, max_speed, min_speed, weight_offset, grid_res):
+    def __init__(self, n_particles, box_size, dt, max_speed, min_speed, weight_offset, grid_res=128, alpha=1.0, accelerate_factor=None):
         self.n_particles = n_particles
         self.box_size = box_size
         self.dt = dt
@@ -18,6 +18,11 @@ class TaichiVicsekModel:
         self.min_speed = min_speed
         self.weight_offset = weight_offset
         self.grid_res = grid_res
+        self.alpha = alpha
+        if not accelerate_factor:
+            self.accelerate_factor = 0.001 * self.box_size
+        else:
+            self.accelerate_factor = accelerate_factor
 
         # Taichi fields (equivalent to global fields in exp_ti.py)
         self.positions = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
@@ -121,6 +126,7 @@ class TaichiVicsekModel:
             wpos_norm_l2 = 1.0
 
         for i, j in ti.ndrange(self.n_particles, self.n_particles):
+            # alpha controls how 'fast' the info spreads throughout the field
             wposnorm_val = wpos_field[j] / wpos_norm_l2
             C_field[i, j] += alpha * wposnorm_val**3
 
@@ -173,7 +179,7 @@ class TaichiVicsekModel:
 
     def step(self):
         # Call the single combined kernel
-        self.update_all_kernel(1.0, 0.03) # alpha and accelerate_factor
+        self.update_all_kernel(self.alpha, self.accelerate_factor)
 
         # Return numpy arrays for plotting
         return self.positions.to_numpy(), self.angles.to_numpy(), \
