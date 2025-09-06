@@ -6,7 +6,7 @@ from scipy.ndimage import gaussian_filter # Used for density map
 import opensimplex # Used for W initialization
 
 # Initialize Taichi once globally
-ti.init(arch=ti.gpu)
+ti.init(arch=ti.vulkan)
 
 @ti.data_oriented # Add this decorator
 class TaichiVicsekModel:
