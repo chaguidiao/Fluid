@@ -86,24 +86,24 @@ class TaichiVicsekModel:
                (1 - tx) * ty * q01 + tx * ty * q11
 
     @ti.func
-    def get_wpos_func(self):
+    def get_wpos(self):
         for i in range(self.n_particles):
             self.wpos_field[i] = self.get_weight_at_pos(self.positions[i])
 
     @ti.func
-    def convert_to_velocities_func(self):
+    def convert_to_velocities(self):
         for i in range(self.n_particles):
             self.velocities_field[i][0] = ti.cos(self.angles[i])
             self.velocities_field[i][1] = ti.sin(self.angles[i])
 
     @ti.func
-    def convert_to_angles_func(self):
+    def convert_to_angles(self):
         for i in range(self.n_particles):
             self.angles[i] = ti.atan2(self.velocities_field[i][1],
                                       self.velocities_field[i][0])
 
     @ti.func
-    def get_weighted_coeff_func(self):
+    def get_weighted_coeff(self):
         for i, j in ti.ndrange(self.n_particles, self.n_particles):
             r = self.positions[i] - self.positions[j]
             dist_sq = r[0]**2 + r[1]**2
@@ -135,7 +135,7 @@ class TaichiVicsekModel:
             self.C_field[i, j] += self.alpha * wposnorm_val**3
 
     @ti.func
-    def update_alignments_func(self):
+    def update_alignments(self):
         for i in range(self.n_particles):
             new_vel_x = 0.0
             new_vel_y = 0.0
@@ -146,7 +146,7 @@ class TaichiVicsekModel:
             self.velocities_field[i][1] = new_vel_y
 
     @ti.func
-    def get_acceleration_func(self):
+    def get_acceleration(self):
         for i in range(self.n_particles):
             ds = 0.0
             for j in range(self.n_particles):
@@ -154,7 +154,7 @@ class TaichiVicsekModel:
             self.speed[i] += ds * self.accelerate_factor
 
     @ti.func
-    def update_positions_func(self):
+    def update_positions(self):
         for i in range(self.n_particles):
             self.velocities_field[i][0] *= self.speed[i]
             self.velocities_field[i][1] *= self.speed[i]
@@ -166,20 +166,20 @@ class TaichiVicsekModel:
             self.positions[i][1] %= self.box_size
 
     @ti.func
-    def clip_speed_func(self):
+    def clip_speed(self):
         for i in range(self.n_particles):
             self.speed[i] = ti.max(self.min_speed, ti.min(self.max_speed, self.speed[i]))
 
     @ti.kernel
     def update(self):
-        self.get_wpos_func()
-        self.get_weighted_coeff_func()
-        self.convert_to_velocities_func()
-        self.update_alignments_func()
-        self.get_acceleration_func()
-        self.clip_speed_func()
-        self.update_positions_func()
-        self.convert_to_angles_func()
+        self.get_wpos()
+        self.get_weighted_coeff()
+        self.convert_to_velocities()
+        self.update_alignments()
+        self.get_acceleration()
+        self.clip_speed()
+        self.update_positions()
+        self.convert_to_angles()
 
     def step(self):
         self.update()
