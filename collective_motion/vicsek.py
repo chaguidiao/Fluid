@@ -30,7 +30,8 @@ class TaichiVicsekModel:
             self.accelerate_factor = accelerate_factor
 
         # Taichi fields (equivalent to global fields in exp_ti.py)
-        self.t = ti.field(dtype=ti.i32, shape=())
+        self.t = ti.field(dtype=ti.f32, shape=())
+        self.t[None] = 0.
         self.positions = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
         self.force_positions = ti.Vector.field(2, dtype=ti.f32, shape=self.n_forces)
         self.angles = ti.field(dtype=ti.f32, shape=self.n_particles)
@@ -212,7 +213,7 @@ class TaichiVicsekModel:
 
     @ti.kernel
     def update(self):
-        self.t[None] += 1
+        self.t[None] += 1.
         self.get_wpos()
         self.get_weighted_coeff()
         self.convert_to_velocities()

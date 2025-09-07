@@ -14,12 +14,12 @@ N_PARTICLES = 500 # From exp_ti.py
 N_FORCES = 42
 GRID_RES = 128 # From exp_ti.py
 DT = 1.0 # From exp_ti.py
-MAX_SPEED = 1.5 # From exp_ti.py
+MAX_SPEED = 2.5 # From exp_ti.py
 MIN_SPEED = 0.0 # From exp_ti.py
 WEIGHT_OFFSET = -0.3 # From exp_ti.py
 ALPHA = 1.0
 ACCELERATE_FACTOR = 0.05 # TODO, need to pair with right BOX_SIZE
-force_strength = 5.0
+force_strength = 0.0
 
 # --- Gaussian Filter Configuration for Weights Heatmap ---
 GAUSSIAN_SIGMA = 2.0 # From exp_ti.py
@@ -66,8 +66,8 @@ ax1.set_xticks([])
 ax1.set_yticks([])
 ax1.set_aspect('equal')
 
-noise_label = ax1.text(0.05, 0.95, '', transform=ax1.transAxes, ha='left', va='top')
-repulse_label = ax1.text(0.05, 0.9, '', transform=ax1.transAxes, ha='left', va='top')
+time_label = ax1.text(0.05, 0.95, '', transform=ax1.transAxes, ha='left', va='top')
+speed_label = ax1.text(0.05, 0.9, '', transform=ax1.transAxes, ha='left', va='top')
 
 # Subplot 2: Density Field
 ax2.set_title("Smoothed Density Field")
@@ -133,12 +133,13 @@ def update(frame):
     # Update weights plot (W is static in exp_ti.py, so this won't change much)
     weights_plot.set_data(vicsek_model.W.to_numpy().T)
 
-    # Update labels (noise and repulsion are not directly from exp_ti.py model)
-    noise_label.set_text(f'noise: N/A (Taichi model)')
-    repulse_label.set_text(f'repulse: N/A (Taichi model)')
+    # Update labels
+    time_label.set_text(f'Time: {vicsek_model.t.to_numpy():.2e} (Taichi model)')
+    speed_label.set_text(f'Mean speed: {speed.mean():.2e} (Taichi model)')
 
-    return quiver, force_quiver, density_plot, weights_plot, noise_label, repulse_label
+    return quiver, force_quiver, density_plot, weights_plot, time_label, speed_label
 
 # --- Run Animation ---
-animation = FuncAnimation(fig, update, frames=200, interval=30, blit=False)
+animation = FuncAnimation(fig, update, frames=30, interval=30, blit=True)
 plt.show()
+
