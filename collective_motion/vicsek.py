@@ -28,9 +28,9 @@ class TaichiVicsekModel:
             self.accelerate_factor = 0.001 * self.box_size
         else:
             self.accelerate_factor = accelerate_factor
-        self.t = 0
 
         # Taichi fields (equivalent to global fields in exp_ti.py)
+        self.t = ti.field(dtype=ti.i32, shape=())
         self.positions = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
         self.force_positions = ti.Vector.field(2, dtype=ti.f32, shape=self.n_forces)
         self.angles = ti.field(dtype=ti.f32, shape=self.n_particles)
@@ -152,7 +152,7 @@ class TaichiVicsekModel:
                 new_vel_x += self.C_field[i, j] * self.velocities_field[j][0]
                 new_vel_y += self.C_field[i, j] * self.velocities_field[j][1]
             # Convert back to unit vector
-            mag = new_vel_x**2 + new_vel_y**2
+            mag = ti.sqrt(new_vel_x**2 + new_vel_y**2)
             new_vel_x /= mag
             new_vel_y /= mag
             self.velocities_field[i][0] = new_vel_x
@@ -191,15 +191,18 @@ class TaichiVicsekModel:
             D_val = 1.0 / ti.exp(ti.sqrt(dist_sq))
             self.F_field[i, j] = D_val
 
-        t_decay = ti.max(0, 5. - 0.1 * self.t)
+        t_decay = ti.exp(-1e-3 * self.t[None])
+        for i in range(self.n_forces):
+            self.force_field[i] *= t_decay
+
         for i in ti.ndrange(self.n_particles):
             for j in range(self.n_forces):
-                dx = self.F_field[i, j] * self.force_field[j][0] * t_decay
-                dy = self.F_field[i, j] * self.force_field[j][1] * t_decay
+                dx = self.F_field[i, j] * self.force_field[j][0]
+                dy = self.F_field[i, j] * self.force_field[j][1]
                 self.velocities_field[i][0] *= self.speed[i]
                 self.velocities_field[i][1] *= self.speed[i]
-                self.velocities_field[i][0] += dx
-                self.velocities_field[i][1] += dy
+                self.velocities_field[i][0] += dx * 100
+                self.velocities_field[i][1] += dy * 100
                 # Get the modified speed
                 self.speed[i] = ti.sqrt(self.velocities_field[i][0]**2 + self.velocities_field[i][1]**2)
                 # Convert back to unit vector
@@ -209,18 +212,18 @@ class TaichiVicsekModel:
 
     @ti.kernel
     def update(self):
+        self.t[None] += 1
         self.get_wpos()
         self.get_weighted_coeff()
         self.convert_to_velocities()
         self.update_alignments()
         self.get_acceleration()
-        #self.apply_forces()
+        self.apply_forces()
         self.clip_speed()
         self.update_positions()
         self.convert_to_angles()
 
     def step(self):
-        self.t += 1
         self.update()
         # Return numpy arrays for plotting
         return self.positions.to_numpy(), self.angles.to_numpy(), self.speed.to_numpy()

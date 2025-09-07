@@ -11,7 +11,7 @@ np.random.seed(42)
 # --- Model Parameters (adapted for exp_ti.py's model) ---
 BOX_SIZE = 100.0 # From exp_ti.py
 N_PARTICLES = 500 # From exp_ti.py
-N_FORCES = 3
+N_FORCES = 42
 GRID_RES = 128 # From exp_ti.py
 DT = 1.0 # From exp_ti.py
 MAX_SPEED = 1.5 # From exp_ti.py
@@ -19,6 +19,7 @@ MIN_SPEED = 0.0 # From exp_ti.py
 WEIGHT_OFFSET = -0.3 # From exp_ti.py
 ALPHA = 1.0
 ACCELERATE_FACTOR = 0.05 # TODO, need to pair with right BOX_SIZE
+force_strength = 5.0
 
 # --- Gaussian Filter Configuration for Weights Heatmap ---
 GAUSSIAN_SIGMA = 2.0 # From exp_ti.py
@@ -38,7 +39,9 @@ vicsek_model = TaichiVicsekModel(
 )
 # --- Initialize forces ---
 force_positions = np.random.rand(N_FORCES, 2) * BOX_SIZE
-forces = np.random.randn(N_FORCES * 2).reshape(-1, 2) * 0.
+forces = np.random.randn(N_FORCES * 2).reshape(-1, 2)
+forces = np.interp(forces, (forces.min(), forces.max()), (-1., 1)) # Scale it
+forces = forces / np.linalg.norm(forces) * force_strength
 vicsek_model.set_forces(force_positions, forces)
 
 # --- Set up the Plot with Three Subplots ---
@@ -119,8 +122,7 @@ def update(frame):
 
     # Update force quivers
     force_quiver.set_offsets(vicsek_model.force_positions.to_numpy())
-    t_decay = np.fmax(0, 5. - 0.1 * vicsek_model.t)
-    f = vicsek_model.force_field.to_numpy() * t_decay
+    f = vicsek_model.force_field.to_numpy()
     force_quiver.set_UVC(f[:, 0], f[:, 1])
 
     # Update density plot
