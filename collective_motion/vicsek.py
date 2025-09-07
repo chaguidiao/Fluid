@@ -14,8 +14,9 @@ ti.init(arch=ti.vulkan)
 
 @ti.data_oriented # Add this decorator
 class TaichiVicsekModel:
-    def __init__(self, n_particles, box_size, dt, max_speed, min_speed, weight_offset, grid_res=128, alpha=1.0, accelerate_factor=None):
+    def __init__(self, n_particles, n_forces, box_size, dt, max_speed, min_speed, weight_offset, grid_res=128, alpha=1.0, accelerate_factor=None):
         self.n_particles = n_particles
+        self.n_forces = n_forces
         self.box_size = box_size
         self.dt = dt
         self.max_speed = max_speed
@@ -27,16 +28,20 @@ class TaichiVicsekModel:
             self.accelerate_factor = 0.001 * self.box_size
         else:
             self.accelerate_factor = accelerate_factor
+        self.t = 0
 
         # Taichi fields (equivalent to global fields in exp_ti.py)
         self.positions = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
+        self.force_positions = ti.Vector.field(2, dtype=ti.f32, shape=self.n_forces)
         self.angles = ti.field(dtype=ti.f32, shape=self.n_particles)
         self.speed = ti.field(dtype=ti.f32, shape=self.n_particles)
         self.W = ti.field(dtype=ti.f32, shape=(self.grid_res, self.grid_res))
         self.row_sums = ti.field(dtype=ti.f32, shape=self.n_particles)
         self.wpos_field = ti.field(dtype=ti.f32, shape=self.n_particles)
         self.velocities_field = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
+        self.force_field = ti.Vector.field(2, dtype=ti.f32, shape=n_forces)
         self.C_field = ti.field(dtype=ti.f32, shape=(self.n_particles, self.n_particles))
+        self.F_field = ti.field(dtype=ti.f32, shape=(self.n_particles, self.n_forces))
 
         # Initialize fields on CPU and copy to Taichi
         W_np = generate_fractal_noise_2d(
@@ -60,6 +65,10 @@ class TaichiVicsekModel:
         self.initial_angles_np = angles_np
         self.initial_velocities_np = (np.array([np.cos(angles_np), np.sin(angles_np)])).T
         self.initial_W_np = W_np # For heatmap
+
+    def set_forces(self, force_positions: np.ndarray, forces: np.ndarray):
+        self.force_positions.from_numpy(force_positions.astype(np.float32))
+        self.force_field.from_numpy(forces.astype(np.float32))
 
     @ti.func
     def get_weight_at_pos(self, pos):
@@ -107,7 +116,7 @@ class TaichiVicsekModel:
         for i, j in ti.ndrange(self.n_particles, self.n_particles):
             r = self.positions[i] - self.positions[j]
             dist_sq = r[0]**2 + r[1]**2
-            D_val = 1.0 / ti.exp(ti.sqrt(dist_sq) + 1e-6)
+            D_val = 1.0 / ti.exp(ti.sqrt(dist_sq))
             self.C_field[i, j] = D_val
 
         for i in range(self.n_particles):
@@ -170,6 +179,24 @@ class TaichiVicsekModel:
         for i in range(self.n_particles):
             self.speed[i] = ti.max(self.min_speed, ti.min(self.max_speed, self.speed[i]))
 
+    @ti.func
+    def apply_forces(self):
+        for i, j in ti.ndrange(self.n_particles, self.n_forces):
+            r = self.positions[i] - self.force_positions[j]
+            dist_sq = r[0]**2 + r[1]**2
+            D_val = 1.0 / ti.exp(ti.sqrt(dist_sq))
+            self.F_field[i, j] = D_val
+
+        t_decay = ti.max(0, 5. - 0.1 * self.t)
+        for i in ti.ndrange(self.n_particles):
+            for j in range(self.n_forces):
+                dx = self.F_field[i, j] * self.force_field[j][0] * t_decay
+                dy = self.F_field[i, j] * self.force_field[j][1] * t_decay
+                self.velocities_field[i][0] += dx
+                self.velocities_field[i][1] += dx
+                self.speed[i] = ti.sqrt(self.velocities_field[i][0]**2 + self.velocities_field[i][1]**2)
+
+
     @ti.kernel
     def update(self):
         self.get_wpos()
@@ -179,9 +206,11 @@ class TaichiVicsekModel:
         self.get_acceleration()
         self.clip_speed()
         self.update_positions()
+        self.apply_forces()
         self.convert_to_angles()
 
     def step(self):
+        self.t += 1
         self.update()
 
         # Return numpy arrays for plotting

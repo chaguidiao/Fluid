@@ -6,11 +6,12 @@ from scipy.ndimage import gaussian_filter # Still needed for weights heatmap smo
 # from vicsek import VicsekModel # Original VicsekModel
 from vicsek import TaichiVicsekModel # New Taichi-based model
 
-np.random.seed(42)
+#np.random.seed(42)
 
 # --- Model Parameters (adapted for exp_ti.py's model) ---
 BOX_SIZE = 100.0 # From exp_ti.py
 N_PARTICLES = 1000 # From exp_ti.py
+N_FORCES = 32
 GRID_RES = 128 # From exp_ti.py
 DT = 1.0 # From exp_ti.py
 MAX_SPEED = 3.0 # From exp_ti.py
@@ -25,6 +26,7 @@ GAUSSIAN_SIGMA = 2.0 # From exp_ti.py
 # --- Initialize TaichiVicsekModel ---
 vicsek_model = TaichiVicsekModel(
     n_particles=N_PARTICLES,
+    n_forces=N_FORCES,
     box_size=BOX_SIZE,
     dt=DT,
     max_speed=MAX_SPEED,
@@ -34,6 +36,11 @@ vicsek_model = TaichiVicsekModel(
     alpha=ALPHA,
     accelerate_factor=ACCELERATE_FACTOR,
 )
+# --- Initialize forces ---
+force_positions = np.random.rand(N_FORCES, 2) * BOX_SIZE
+#forces = np.random.rand(N_FORCES, 2) - 0.5 * 2.0
+forces = np.random.randn(N_FORCES * 2).reshape(-1, 2) * 0.5
+vicsek_model.set_forces(force_positions, forces)
 
 # --- Set up the Plot with Three Subplots ---
 fig = plt.figure(figsize=(21, 7))
@@ -46,6 +53,11 @@ ax3 = plt.subplot2grid((2, 3), (1, 2)) # Weights heatmap
 title = ax1.set_title(f"Taichi Vicsek Model (Periodic Boundaries)") # Boundary mode is fixed to periodic for now
 quiver = ax1.quiver(vicsek_model.initial_positions_np[:, 0], vicsek_model.initial_positions_np[:, 1],
                     vicsek_model.initial_velocities_np[:, 0], vicsek_model.initial_velocities_np[:, 1])
+force_quiver = ax1.quiver(
+    force_positions[:, 0], force_positions[:, 1],
+    forces[:, 0], forces[:, 1],
+    color='red'
+)
 ax1.set_xlim(0, BOX_SIZE)
 ax1.set_ylim(0, BOX_SIZE)
 ax1.set_xticks([])
@@ -105,6 +117,12 @@ def update(frame):
     quiver.set_offsets(positions)
     quiver.set_UVC(velocities[:, 0], velocities[:, 1], angles) # Use actual speed for color
 
+    # Update force quivers
+    force_quiver.set_offsets(vicsek_model.force_positions.to_numpy())
+    t_decay = np.fmax(0, 5. - 0.1 * vicsek_model.t)
+    f = vicsek_model.force_field.to_numpy() * t_decay
+    force_quiver.set_UVC(f[:, 0], f[:, 1])
+
     # Update density plot
     density_map = vicsek_model.get_density_map()
     density_plot.set_data(density_map.T)
@@ -117,7 +135,7 @@ def update(frame):
     noise_label.set_text(f'noise: N/A (Taichi model)')
     repulse_label.set_text(f'repulse: N/A (Taichi model)')
 
-    return quiver, density_plot, weights_plot, noise_label, repulse_label
+    return quiver, force_quiver, density_plot, weights_plot, noise_label, repulse_label
 
 # --- Run Animation ---
 animation = FuncAnimation(fig, update, frames=200, interval=30, blit=False)
