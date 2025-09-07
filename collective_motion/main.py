@@ -6,19 +6,19 @@ from scipy.ndimage import gaussian_filter # Still needed for weights heatmap smo
 # from vicsek import VicsekModel # Original VicsekModel
 from vicsek import TaichiVicsekModel # New Taichi-based model
 
-#np.random.seed(42)
+np.random.seed(42)
 
 # --- Model Parameters (adapted for exp_ti.py's model) ---
 BOX_SIZE = 100.0 # From exp_ti.py
-N_PARTICLES = 1000 # From exp_ti.py
-N_FORCES = 32
+N_PARTICLES = 500 # From exp_ti.py
+N_FORCES = 3
 GRID_RES = 128 # From exp_ti.py
 DT = 1.0 # From exp_ti.py
-MAX_SPEED = 3.0 # From exp_ti.py
+MAX_SPEED = 1.5 # From exp_ti.py
 MIN_SPEED = 0.0 # From exp_ti.py
 WEIGHT_OFFSET = -0.3 # From exp_ti.py
 ALPHA = 1.0
-ACCELERATE_FACTOR = 0.001 * BOX_SIZE
+ACCELERATE_FACTOR = 0.05 # TODO, need to pair with right BOX_SIZE
 
 # --- Gaussian Filter Configuration for Weights Heatmap ---
 GAUSSIAN_SIGMA = 2.0 # From exp_ti.py
@@ -38,8 +38,7 @@ vicsek_model = TaichiVicsekModel(
 )
 # --- Initialize forces ---
 force_positions = np.random.rand(N_FORCES, 2) * BOX_SIZE
-#forces = np.random.rand(N_FORCES, 2) - 0.5 * 2.0
-forces = np.random.randn(N_FORCES * 2).reshape(-1, 2) * 0.5
+forces = np.random.randn(N_FORCES * 2).reshape(-1, 2) * 0.
 vicsek_model.set_forces(force_positions, forces)
 
 # --- Set up the Plot with Three Subplots ---
@@ -111,7 +110,8 @@ slider.on_changed(on_dt_change)
 
 # --- Animation Update Function ---
 def update(frame):
-    positions, angles, velocities, speed = vicsek_model.step()
+    positions, angles, speed = vicsek_model.step()
+    velocities = speed.reshape(-1, 1) * np.array((np.cos(angles), np.sin(angles))).T
 
     # Update particle plot
     quiver.set_offsets(positions)

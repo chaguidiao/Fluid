@@ -151,6 +151,10 @@ class TaichiVicsekModel:
             for j in range(self.n_particles):
                 new_vel_x += self.C_field[i, j] * self.velocities_field[j][0]
                 new_vel_y += self.C_field[i, j] * self.velocities_field[j][1]
+            # Convert back to unit vector
+            mag = new_vel_x**2 + new_vel_y**2
+            new_vel_x /= mag
+            new_vel_y /= mag
             self.velocities_field[i][0] = new_vel_x
             self.velocities_field[i][1] = new_vel_y
 
@@ -192,9 +196,15 @@ class TaichiVicsekModel:
             for j in range(self.n_forces):
                 dx = self.F_field[i, j] * self.force_field[j][0] * t_decay
                 dy = self.F_field[i, j] * self.force_field[j][1] * t_decay
+                self.velocities_field[i][0] *= self.speed[i]
+                self.velocities_field[i][1] *= self.speed[i]
                 self.velocities_field[i][0] += dx
-                self.velocities_field[i][1] += dx
+                self.velocities_field[i][1] += dy
+                # Get the modified speed
                 self.speed[i] = ti.sqrt(self.velocities_field[i][0]**2 + self.velocities_field[i][1]**2)
+                # Convert back to unit vector
+                self.velocities_field[i][0] /= self.speed[i]
+                self.velocities_field[i][1] /= self.speed[i]
 
 
     @ti.kernel
@@ -204,18 +214,16 @@ class TaichiVicsekModel:
         self.convert_to_velocities()
         self.update_alignments()
         self.get_acceleration()
+        #self.apply_forces()
         self.clip_speed()
         self.update_positions()
-        self.apply_forces()
         self.convert_to_angles()
 
     def step(self):
         self.t += 1
         self.update()
-
         # Return numpy arrays for plotting
-        return self.positions.to_numpy(), self.angles.to_numpy(), \
-               self.velocities_field.to_numpy(), self.speed.to_numpy()
+        return self.positions.to_numpy(), self.angles.to_numpy(), self.speed.to_numpy()
 
     def get_density_map(self):
         # This method is kept for completeness but is decoupled from the core step
