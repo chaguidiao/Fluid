@@ -34,9 +34,9 @@ class TaichiVicsekModel:
         self.speed = ti.field(dtype=ti.f32, shape=self.n_particles)
         self.W = ti.field(dtype=ti.f32, shape=(self.grid_res, self.grid_res))
         self.row_sums = ti.field(dtype=ti.f32, shape=self.n_particles)
-        self.wpos_field_global = ti.field(dtype=ti.f32, shape=self.n_particles)
-        self.velocities_field_global = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
-        self.C_field_global = ti.field(dtype=ti.f32, shape=(self.n_particles, self.n_particles))
+        self.wpos_field = ti.field(dtype=ti.f32, shape=self.n_particles)
+        self.velocities_field = ti.Vector.field(2, dtype=ti.f32, shape=self.n_particles)
+        self.C_field = ti.field(dtype=ti.f32, shape=(self.n_particles, self.n_particles))
 
         # Initialize fields on CPU and copy to Taichi
         W_np = generate_fractal_noise_2d(
@@ -86,82 +86,81 @@ class TaichiVicsekModel:
                (1 - tx) * ty * q01 + tx * ty * q11
 
     @ti.func
-    def get_wpos_func(self, wpos_field: ti.template()):
+    def get_wpos_func(self):
         for i in range(self.n_particles):
-            wpos_field[i] = self.get_weight_at_pos(self.positions[i])
+            self.wpos_field[i] = self.get_weight_at_pos(self.positions[i])
 
     @ti.func
-    def convert_to_velocities_func(self, velocities_field: ti.template()):
+    def convert_to_velocities_func(self):
         for i in range(self.n_particles):
-            angle = self.angles[i]
-            velocities_field[i][0] = ti.cos(angle)
-            velocities_field[i][1] = ti.sin(angle)
+            self.velocities_field[i][0] = ti.cos(self.angles[i])
+            self.velocities_field[i][1] = ti.sin(self.angles[i])
 
     @ti.func
-    def convert_to_angles_func(self, velocities_field: ti.template()):
+    def convert_to_angles_func(self):
         for i in range(self.n_particles):
-            velocities = velocities_field[i]
-            self.angles[i] = ti.atan2(velocities[1], velocities[0])
+            self.angles[i] = ti.atan2(self.velocities_field[i][1],
+                                      self.velocities_field[i][0])
 
     @ti.func
-    def get_weighted_coeff_func(self, C_field: ti.template(), wpos_field: ti.template(), alpha: ti.f32, row_sums_field: ti.template()):
+    def get_weighted_coeff_func(self):
         for i, j in ti.ndrange(self.n_particles, self.n_particles):
             r = self.positions[i] - self.positions[j]
             dist_sq = r[0]**2 + r[1]**2
             D_val = 1.0 / ti.exp(ti.sqrt(dist_sq) + 1e-6)
-            C_field[i, j] = D_val
+            self.C_field[i, j] = D_val
 
         for i in range(self.n_particles):
             row_sum = 0.0
             for j in range(self.n_particles):
-                row_sum += C_field[i, j]
-            row_sums_field[i] = row_sum
+                row_sum += self.C_field[i, j]
+            self.row_sums[i] = row_sum
 
         for i, j in ti.ndrange(self.n_particles, self.n_particles):
-            if row_sums_field[i] > 0:
-                C_field[i, j] /= row_sums_field[i]
+            if self.row_sums[i] > 0:
+                self.C_field[i, j] /= self.row_sums[i]
             else:
-                C_field[i, j] = 0.0
+                self.C_field[i, j] = 0.0
 
         wpos_norm_l2_sq = 0.0
         for i in range(self.n_particles):
-            wpos_norm_l2_sq += wpos_field[i]**2
+            wpos_norm_l2_sq += self.wpos_field[i]**2
         wpos_norm_l2 = ti.sqrt(wpos_norm_l2_sq)
         if wpos_norm_l2 == 0:
             wpos_norm_l2 = 1.0
 
         for i, j in ti.ndrange(self.n_particles, self.n_particles):
             # alpha controls how 'fast' the info spreads throughout the field
-            wposnorm_val = wpos_field[j] / wpos_norm_l2
-            C_field[i, j] += alpha * wposnorm_val**3
+            wposnorm_val = self.wpos_field[j] / wpos_norm_l2
+            self.C_field[i, j] += self.alpha * wposnorm_val**3
 
     @ti.func
-    def update_alignments_func(self, velocities_field: ti.template(), C_field: ti.template()):
+    def update_alignments_func(self):
         for i in range(self.n_particles):
             new_vel_x = 0.0
             new_vel_y = 0.0
             for j in range(self.n_particles):
-                new_vel_x += C_field[i, j] * velocities_field[j][0]
-                new_vel_y += C_field[i, j] * velocities_field[j][1]
-            velocities_field[i][0] = new_vel_x
-            velocities_field[i][1] = new_vel_y
+                new_vel_x += self.C_field[i, j] * self.velocities_field[j][0]
+                new_vel_y += self.C_field[i, j] * self.velocities_field[j][1]
+            self.velocities_field[i][0] = new_vel_x
+            self.velocities_field[i][1] = new_vel_y
 
     @ti.func
-    def get_acceleration_func(self, wpos_field: ti.template(), C_field: ti.template(), accelerate_factor: ti.f32):
+    def get_acceleration_func(self):
         for i in range(self.n_particles):
             ds = 0.0
             for j in range(self.n_particles):
-                ds += C_field[i, j] * wpos_field[j]
-            self.speed[i] += ds * accelerate_factor
+                ds += self.C_field[i, j] * self.wpos_field[j]
+            self.speed[i] += ds * self.accelerate_factor
 
     @ti.func
-    def update_positions_func(self, velocities_field: ti.template()):
+    def update_positions_func(self):
         for i in range(self.n_particles):
-            velocities_field[i][0] *= self.speed[i]
-            velocities_field[i][1] *= self.speed[i]
+            self.velocities_field[i][0] *= self.speed[i]
+            self.velocities_field[i][1] *= self.speed[i]
 
-            self.positions[i][0] += velocities_field[i][0] * self.dt
-            self.positions[i][1] += velocities_field[i][1] * self.dt
+            self.positions[i][0] += self.velocities_field[i][0] * self.dt
+            self.positions[i][1] += self.velocities_field[i][1] * self.dt
 
             self.positions[i][0] %= self.box_size
             self.positions[i][1] %= self.box_size
@@ -172,23 +171,22 @@ class TaichiVicsekModel:
             self.speed[i] = ti.max(self.min_speed, ti.min(self.max_speed, self.speed[i]))
 
     @ti.kernel
-    def update_all_kernel(self, alpha: ti.f32, accelerate_factor: ti.f32):
-        self.get_wpos_func(self.wpos_field_global)
-        self.get_weighted_coeff_func(self.C_field_global, self.wpos_field_global, alpha, self.row_sums)
-        self.convert_to_velocities_func(self.velocities_field_global)
-        self.update_alignments_func(self.velocities_field_global, self.C_field_global)
-        self.get_acceleration_func(self.wpos_field_global, self.C_field_global, accelerate_factor)
+    def update(self):
+        self.get_wpos_func()
+        self.get_weighted_coeff_func()
+        self.convert_to_velocities_func()
+        self.update_alignments_func()
+        self.get_acceleration_func()
         self.clip_speed_func()
-        self.update_positions_func(self.velocities_field_global)
-        self.convert_to_angles_func(self.velocities_field_global)
+        self.update_positions_func()
+        self.convert_to_angles_func()
 
     def step(self):
-        # Call the single combined kernel
-        self.update_all_kernel(self.alpha, self.accelerate_factor)
+        self.update()
 
         # Return numpy arrays for plotting
         return self.positions.to_numpy(), self.angles.to_numpy(), \
-               self.velocities_field_global.to_numpy(), self.speed.to_numpy()
+               self.velocities_field.to_numpy(), self.speed.to_numpy()
 
     def get_density_map(self):
         # This method is kept for completeness but is decoupled from the core step
